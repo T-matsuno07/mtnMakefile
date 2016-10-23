@@ -1,50 +1,130 @@
-# Most Simple Makefile
+# Author : Tsukasa Matsuno
+# LastUpdate : 2016/10/22
 
-# Compile Option
-CXX = gcc -g
+# トップディレクトリ以下、全ソースファイルとヘッダーファイルを検索して、
+# 実行ファイルを生成する汎用makefile
 
-TOP_DIR=$(HOME)git/myGitMakefile
+# ビルド対象となるTOPディレクトリを指定
+# 本ディレクトリ以下の全てのディレクトリとフォルダがビルド対象
+TOP_DIR=$(HOME)/Documents
+# コンパイルコマンド定義
+COMP_CMD=gcc -g -c
+# リンカーコマンド定義
+LINK_CMD=gcc -g
 
-CUR_DIR=$(PWD)
-OBJ_DIR=$(CUR_DIR)/OBJ
-DEP_DIR=$(CUR_DIR)/DEP
-HEAD_DIR=$(TOP_DIR)/head
+# TOP_DIRで指定したディレクトリ以下の存在するファイルをビルドするため、
+# 本makefileは任意の場所に配置して良い。
+# TOP_DIR直下の「DEP」「OBJ」は、makefileで管理するディレクトリとなるため、
+# ユーザが作成したファイルを配置しないこと。(cleanを実行すると削除する)
+# ソースファイルの拡張子は「.c」にのみ対応。 ソースファイルは、
+# main関数を含むmainファイルと、main関数を含まないlibファイルに分類。
+# libファイルのオブジェクトファイルはOBJに配置される。
+# mainファイルはオブジェクトファイルを生成せずに、
+# ソースから直接実行ファイルを作成する。
 
+# 【この行より下は編集しないこと】
 
-CUR_SRCS=$(wildcard *.c)
-CUR_TGTS=$(basename $(CUR_SRCS))
-CUR_OBJS=$(addprefix $(OBJ_DIR)/, $(CUR_SRCS:.c=.o))
-CUR_DEPS=$(addprefix $(DEP_DIR)/, $(CUR_SRCS:.c=.d))
+#-----------------------------------------------------------------
+# ビルドで使用する変数定義 
+#-----------------------------------------------------------------
 
-all: $(CUR_TGTS)
+# 中間ファイルを出力するディレクトリを定義
+# オブジェクトファイル出力先ディレクトリ
+OBJ_DIR=$(TOP_DIR)/OBJ
+# 依存関係ファイルとログファイルの出力先ディレクトリ
+DEP_DIR=$(TOP_DIR)/DEP
+# 出力先ディレクトリをmkdir
+$(shell [ -d $(OBJ_DIR) ] || mkdir -p  $(OBJ_DIR))
+$(shell [ -d $(DEP_DIR) ] || mkdir -p  $(DEP_DIR))
+# ビルドに使う中間ファイルを作成
+# TOPディレクトリ以下に存在する全ての.c拡張子ファイルのパスを保存
+OUTFILE_ALL_C=$(DEP_DIR)/all_source_list.txt
 
--include $(CUR_DEPS)
+# TOPディレクトリ以下に存在する全ての.c拡張子ファイルを検索
+ALL_SOURCE=$(shell find $(TOP_DIR) -type f -name "*.c" 2> /dev/null )
+$(shell echo $(ALL_SOURCE) | sed 's/ /\n/g' > $(OUTFILE_ALL_C))
+# カレントディレクトリ以下に存在する全ての.cファイルを検索
+CURRENT_SOURCE=$(shell find $(PWD) -type f -name "*.c" 2> /dev/null )
+# 全ての.cファイルをmain関数を含む物と含まない物に分ける
+STR_MAIN="main("
+# main関数を含む物を抽出する(mainファイル)
+MAIN_C_SOURCE=$(shell grep $(STR_MAIN) -l $(CURRENT_SOURCE))
+# main関数を含まない物を抽出する(libファイル)
+LIB_C_SOURCE=$(shell grep $(STR_MAIN) -L $(ALL_SOURCE))
 
-$(CUR_TGTS) : $(CUR_OBJS)
-	$(CXX) -o $@ $^ 
+# コンパイラの-Iオプション用変数INC_OPTを作る
+# TOPディレクトリ以下に存在する全ての.c拡張子ファイルを検索
+ALL_HEAD_F=$(shell find $(TOP_DIR) -type f -name "*.h" 2> /dev/null )
+# 検索結果からディレクトリ部分の文字列を抽出
+ALL_HEAD_D=$(dir $(ALL_HEAD_F))
+# ディレクトリの重複を削除するため、sort|uniqに投げる
+# sortは行単位でしか行えないため、半角スペースを改行に置換する
+INC_DIR=$(shell echo $(ALL_HEAD_D) | sed 's/ /\n/g'| sort | uniq )
+# インクルードオプションである「-I」を付与
+INC_OPT=$(addprefix -I, $(INC_DIR))
 
-$(OBJ_DIR)/%.o : %.c
-#	@if [ ! -d $(OBJ_DIR) ]; then \
-#	  echo mkdidr $(OBJ_DIR); mkdir $(OBJ_DIR); \
-#	fi
-#	@if [ ! -d $(DEP_DIR) ]; then \
-#	  echo mkdidr $(DEP_DIR); mkdir $(DEP_DIR); \
-#	fi
-	@[ -d $(OBJ_DIR) ] || echo "mkdir -p  $(OBJ_DIR)"; mkdir -p  $(OBJ_DIR)
-	@[ -d $(DEP_DIR) ] || echo "mkdir -p  $(DEP_DIR)"; mkdir -p  $(DEP_DIR)
-	$(CXX) -MMD -MF dep.tmp -c $< -I$(HEAD_DIR)
-	sed "s@$(<:%.c=%.o)@$(OBJ_DIR)/$(<:%.c=%.o)@g"  dep.tmp | sed "s@$<@$(CUR_DIR)/$<@g" > $(<:%.c=%.d) 
-	rm -fr dep.tmp
-	mv $(<:%.c=%.o) $(OBJ_DIR)
-	mv $(<:%.c=%.d) $(DEP_DIR)
+# ヘッダーファイル依存関係
+# TOPディレクトリ以下に存在する全ての.d拡張子ファイルを検索
+ALL_DEPT=$(shell find $(TOP_DIR) -type f -name "*.d" 2> /dev/null )
 
+# 実行ファイルリスト作成
+# 実行ファイルには拡張子をつけない
+MAIN_EXE=$(basename $(MAIN_C_SOURCE))
+# mainファイルのオブジェクトファイルを定義
+MAIN_OBJ=$(addprefix $(OBJ_DIR)/, $(notdir $(MAIN_C_SOURCE:%.c=%.o)))
+# libファイルのオブジェクトのオブジェクトファイルを定義
+LIB_OBJ=$(addprefix $(OBJ_DIR)/, $(notdir $(LIB_C_SOURCE:%.c=%.o)))
 
+CUR_SRCS=$(shell find . -type f -name "*.c" 2> /dev/null )
+CUR_TSTS=$(CUR_SRCS:.c=)
+#-----------------------------------------------------------------
+# ビルドコマンド
+# コマンドの先頭に@を付けると画面にコマンドを出力しない
+#-----------------------------------------------------------------
 
+all:$(MAIN_EXE)
 
-test :
-	@echo $(CUR_DEPS)
+#-----------------------------------------------------------------
+# リンクコマンド
+# 実行ファイルを作成する
+#-----------------------------------------------------------------
+# カレントディレクトリに含まれる(再帰的)全mainファイルをコンパイル＆リンク
+$(MAIN_EXE) : % : %.c $(LIB_OBJ)
+	@echo $(LINK_CMD) -MMD -MF demp.tmp -o $@  $<  $(LIB_OBJ) $(INC_OPT) >  linklog.txt
+	$(LINK_CMD) -MMD -MF demp.tmp -o $@ $<  $(LIB_OBJ) $(INC_OPT) | tee log.tmp
+	@mv -f demp.tmp $(DEP_DIR)/$(notdir $(<:%.c=%.d))
+	@cat linklog.txt >> $(DEP_DIR)/$(notdir $@).log; cat log.tmp >> $(DEP_DIR)/$(notdir $@).log; 
+	@rm -fr linklog.txt log.tmp demp.tmp
 
+# 個別に実行ファイルを指定した場合のコンパイル＆リンク
+# 相対パスで指定した場合の関係を記載している
+$(CUR_TSTS) : % : %.c $(LIB_OBJ)
+	@echo $(LINK_CMD) -MMD -MF demp.tmp -o $@  $<  $(LIB_OBJ) $(INC_OPT) >  linklog.txt
+	$(LINK_CMD) -MMD -MF demp.tmp -o $@ $<  $(LIB_OBJ) $(INC_OPT) | tee log.tmp
+	@sed "s!$@!$(PWD)/$@!g"  demp.tmp > $(<:%.c=%.d) 
+	@mv -f $(<:%.c=%.d)  $(DEP_DIR)
+	@cat linklog.txt >> $(DEP_DIR)/$(notdir $@).log; cat log.tmp >> $(DEP_DIR)/$(notdir $@).log; 
+	@rm -fr linklog.txt log.tmp demp.tmp
+
+#-----------------------------------------------------------------
+# コンパイルコマンド
+# オブジェクトファイルを作成する
+#-----------------------------------------------------------------
+# libファイルをコンパイルするコマンド
+# コンパイルによって生成したオブジェクトファイルはOBJディレクトリに格納する
+$(LIB_OBJ) : %.o : $(shell cat $(OUTFILE_ALL_C) | grep %.c )
+	@echo $(COMP_CMD) -o $@ -MMD -MF demp.tmp $(shell cat $(OUTFILE_ALL_C) | grep  $(notdir $(@:%.o=%.c))) $(INC_OPT) > complog.txt
+	$(COMP_CMD) -o $@ -MMD -MF demp.tmp $(shell cat $(OUTFILE_ALL_C) | grep  $(notdir $(@:%.o=%.c))) $(INC_OPT) 2>&1 | tee log.tmp
+	@mv -f demp.tmp $(DEP_DIR)/$(notdir $(@:%.o=%.d))
+	@cat log.tmp >> complog.txt; rm -fr log.tmp
+	@mv -f complog.txt $(DEP_DIR)/$(notdir $(@:%.o=%.log))
+
+# ヘッダーファイルの依存関係ファイルを読み込む
+-include $(ALL_DEPT)
+
+#-----------------------------------------------------------------
+# cleanコマンド
+#-----------------------------------------------------------------
 clean :
-	rm -rf *.a *.o *.d $(OBJ_DIR) $(DEP_DIR) $(CUR_TGTS) 
-
-
+	rm -fr $(OBJ_DIR) $(DEP_DIR)
+	rm -fr $(MAIN_EXE) 
