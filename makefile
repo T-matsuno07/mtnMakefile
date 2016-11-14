@@ -1,5 +1,5 @@
 # Author : Tsukasa Matsuno
-# LastUpdate : 2016/10/22
+# LastUpdate : 2016/11/14
 
 # トップディレクトリ以下、全ソースファイルとヘッダーファイルを検索して、
 # 実行ファイルを生成する汎用makefile
@@ -126,5 +126,14 @@ $(LIB_OBJ) : %.o : $(shell cat $(OUTFILE_ALL_C) | grep %.c )
 # cleanコマンド
 #-----------------------------------------------------------------
 clean :
-	rm -fr $(OBJ_DIR) $(DEP_DIR)
-	rm -fr $(MAIN_EXE) 
+	rm -fr $(OBJ_DIR) $(DEP_DIR) 
+	rm -fr $(MAIN_EXE)
+	find $(TOP_DIR) -type f -name "TAGS" | xargs rm -f
+
+#-----------------------------------------------------------------
+# tagsコマンド
+#-----------------------------------------------------------------
+tags :
+	@ctags -Re --languages=c,c++ $(TOP_DIR)
+	@cp TAGS $(TOP_DIR)/ 
+	@echo "make TAGS : ./TAGS " $(TOP_DIR)/TAGS
